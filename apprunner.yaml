@@ -1,0 +1,19 @@
+version: 1.0
+# Be specific with the runtime, e.g., python3.11 or python3.10
+runtime: python3.11
+
+build:
+  commands:
+    build:
+      # requirements.txt is in the root, so no 'cd' is needed
+      - pip install -r requirements.txt
+
+run:
+  # No 'cd backend' needed.
+  # This command runs 'uvicorn' from the root.
+  # It assumes your FastAPI app is named 'app'
+  # and is located inside the 'app/main.py' file.
+  command: uvicorn app.main:app --host 0.0.0.0 --port 8080
+  network:
+    # This port MUST match the port in the 'command' above
+    port: 8080
