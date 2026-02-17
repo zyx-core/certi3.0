@@ -1,15 +1,18 @@
-# Use official Python runtime as a parent image
-FROM python:3.10-slim
+# Use a specific, stable slim version (Bookworm is Debian 12)
+FROM python:3.10-slim-bookworm
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install system dependencies (Tesseract OCR + GL dependencies for OpenCV/Pillow if needed)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies
+# Added libgl1 and libglib2.0-0 which are common requirements for cv2/pillow
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     libtesseract-dev \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglib2.0-0 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory
