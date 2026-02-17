@@ -233,8 +233,8 @@ def send_certificates_only(data_list, email_column_name, subject, content):
     
     server_lock = threading.Lock()
 
-    # Inner function to access server/lock
-    def _send_task(server, row):
+    # Inner function to send email with its own SMTP connection
+    def _send_task(row):
         # Try to find name column (case-insensitive)
         name = None
         for key in row.keys():
@@ -270,7 +270,10 @@ def send_certificates_only(data_list, email_column_name, subject, content):
             with open(cert_path, "rb") as f:
                 msg.add_attachment(f.read(), maintype="image", subtype="png", filename=f"{name}.png")
 
-            with server_lock:
+            # Create a new SMTP connection for this thread
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
                 server.send_message(msg)
             
             return {"success": True, "message": f"Sent to {name} ({email})"}
@@ -278,31 +281,28 @@ def send_certificates_only(data_list, email_column_name, subject, content):
             return {"success": False, "message": f"Failed to send to {name}: {str(e)}"}
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            yield json.dumps({"type": "log", "message": "Connected! Starting to send emails..."}) + "\n"
+        yield json.dumps({"type": "log", "message": "Starting email sending process..."}) + "\n"
 
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {executor.submit(_send_task, server, row): row for row in data_list}
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(_send_task, row): row for row in data_list}
+            
+            for future in as_completed(futures):
+                result = future.result()
+                if result["success"]:
+                    success_count += 1
+                else:
+                    error_count += 1
                 
-                for future in as_completed(futures):
-                    result = future.result()
-                    if result["success"]:
-                        success_count += 1
-                    else:
-                        error_count += 1
-                    
-                    # Yield progress and log
-                    yield json.dumps({
-                        "type": "progress",
-                        "sent": success_count,
-                        "failed": error_count,
-                        "total": total,
-                        "log": result["message"]
-                    }) + "\n"
+                # Yield progress and log
+                yield json.dumps({
+                    "type": "progress",
+                    "sent": success_count,
+                    "failed": error_count,
+                    "total": total,
+                    "log": result["message"]
+                }) + "\n"
 
         yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully."}) + "\n"
 
     except Exception as e:
-        yield json.dumps({"type": "error", "message": f"Email server error: {str(e)}"}) + "\n"
+        yield json.dumps({"type": "error", "message": f"Email server error: {str(e)}"}) + "\n" + "\n"
