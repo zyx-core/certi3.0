@@ -277,24 +277,23 @@ def send_certificates_only(data_list, email_column_name, subject, content):
 
     try:
         yield json.dumps({"type": "log", "message": "Starting email sending process via Resend API..."}) + "\n"
-
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(_send_task, row): row for row in data_list}
+        
+        for row in data_list:
+            result = _send_task(row)
+            if result["success"]:
+                success_count += 1
+            else:
+                error_count += 1
             
-            for future in as_completed(futures):
-                result = future.result()
-                if result["success"]:
-                    success_count += 1
-                else:
-                    error_count += 1
-                
-                yield json.dumps({
-                    "type": "progress",
-                    "sent": success_count,
-                    "failed": error_count,
-                    "total": total,
-                    "log": result["message"]
-                }) + "\n"
+            yield json.dumps({
+                "type": "progress",
+                "sent": success_count,
+                "failed": error_count,
+                "total": total,
+                "log": result["message"]
+            }) + "\n"
+            
+            time.sleep(1.0)
 
         yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully via Resend."}) + "\n"
 
