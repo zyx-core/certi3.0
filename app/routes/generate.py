@@ -8,14 +8,18 @@ from fastapi.responses import FileResponse
 
 router = APIRouter()
 
-# --- UPDATED: Add 'font' property ---
+# --- UPDATED: Add 'font' and 'uppercase' properties ---
 class PlaceholderProperties(BaseModel):
     x: float
     y: float
     font_size: float
     color: str
     bold: bool
-    font: str = "Roboto" # Add font with a default value
+    italic: Optional[bool] = False
+    underline: Optional[bool] = False
+    strikethrough: Optional[bool] = False
+    font: str = "Poppins"  # Default font
+    uppercase: Optional[bool] = False  # New: text transformation
 
 # --- FIXED: Added missing fields ---
 class CertificateData(BaseModel):
@@ -62,7 +66,7 @@ async def generate_and_send_uploaded(data: CertificateData):
 
     except Exception as e:
         import traceback
-        print("❌ Exception in /generate-and-send-uploaded:", traceback.format_exc())
+        print("Exception in /generate-and-send-uploaded:", traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-preview")
@@ -89,5 +93,5 @@ async def generate_live_preview(data: CertificateData):
 
     except Exception as e:
         import traceback
-        print(f"❌ Exception in /generate-preview: {traceback.format_exc()}")
+        print(f"Exception in /generate-preview: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))

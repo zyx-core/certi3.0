@@ -13,16 +13,55 @@ OUTPUT_DIR = "generated_certificates"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 FONT_MAP = {
-    "Roboto": {"regular": "Poppins-Regular.ttf", "bold": "Poppins-Black.ttf"},
-    "Arimo": {"regular": "Poppins-Regular.ttf", "bold": "Poppins-Black.ttf"},
-    "Tinos": {"regular": "Poppins-Regular.ttf", "bold": "Poppins-Black.ttf"},
-    "Poppins": {"regular": "Poppins-Regular.ttf", "bold": "Poppins-Black.ttf"},
+    "Poppins": {
+        "regular": "Poppins-Regular.ttf",
+        "bold": "Poppins-Bold.ttf",
+        "italic": "Poppins-Italic.ttf",
+        "bold_italic": "Poppins-BoldItalic.ttf",
+        "light": "Poppins-Light.ttf",
+        "medium": "Poppins-Medium.ttf",
+        "semibold": "Poppins-SemiBold.ttf",
+        "extrabold": "Poppins-ExtraBold.ttf"
+    },
+    "Roboto": {
+        "regular": "Roboto-VariableFont_wdth,wght.ttf",
+        "bold": "Roboto-VariableFont_wdth,wght.ttf",
+        "italic": "Roboto-Italic-VariableFont_wdth,wght.ttf",
+        "bold_italic": "Roboto-Italic-VariableFont_wdth,wght.ttf"
+    },
+    "Tinos": {
+        "regular": "Tinos-Regular.ttf",
+        "bold": "Tinos-Bold.ttf",
+        "italic": "Tinos-Italic.ttf",
+        "bold_italic": "Tinos-BoldItalic.ttf"
+    },
+    "Arimo": {
+        "regular": "Arimo-VariableFont_wght.ttf",
+        "bold": "Arimo-VariableFont_wght.ttf",
+        "italic": "Arimo-Italic-VariableFont_wght.ttf",
+        "bold_italic": "Arimo-Italic-VariableFont_wght.ttf"
+    },
+    "Manrope": {
+        "regular": "Manrope-VariableFont_wght.ttf",
+        "bold": "Manrope-VariableFont_wght.ttf",
+        "italic": "Manrope-VariableFont_wght.ttf",
+        "bold_italic": "Manrope-VariableFont_wght.ttf"
+    }
 }
 
-def get_font(font_name: str, is_bold: bool, font_size: int) -> ImageFont.FreeTypeFont:
-    style = "bold" if is_bold else "regular"
-    font_file = FONT_MAP.get(font_name, FONT_MAP["Roboto"]).get(style, FONT_MAP["Roboto"]["regular"])
+def get_font(font_name: str, is_bold: bool, is_italic: bool, font_size: int) -> ImageFont.FreeTypeFont:
+    if is_bold and is_italic:
+        style = "bold_italic"
+    elif is_bold:
+        style = "bold"
+    elif is_italic:
+        style = "italic"
+    else:
+        style = "regular"
+        
+    font_file = FONT_MAP.get(font_name, FONT_MAP["Poppins"]).get(style, FONT_MAP["Poppins"]["regular"])
     font_path = os.path.join("fonts", font_file)
+    
     try:
         return ImageFont.truetype(font_path, font_size)
     except IOError:
@@ -37,13 +76,29 @@ def draw_certificate(template_path: str, output_path: str, data: dict, placehold
     
     for field, settings in placeholders.items():
         value = str(data.get(field, field))
+        
+        # Apply uppercase transformation if enabled
+        if getattr(settings, 'uppercase', False):
+            value = value.upper()
+        
         font_size = int(settings.font_size)
         font_name = settings.font
         bold = settings.bold
+        is_italic = getattr(settings, 'italic', False)
+        underline = getattr(settings, 'underline', False)
+        strikethrough = getattr(settings, 'strikethrough', False)
+        
         x, y = settings.x, settings.y
         color = settings.color
         
-        font = get_font(font_name, bold, font_size)
+        # Convert hex color to RGB tuple if needed
+        if isinstance(color, str) and color.startswith('#'):
+            try:
+                color = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+            except:
+                color = "black"  # Fallback to black if conversion fails
+        
+        font = get_font(font_name, bold, is_italic, font_size)
         
         text_bbox = draw.textbbox((0, 0), value, font=font)
         text_width = text_bbox[2] - text_bbox[0]
@@ -52,9 +107,25 @@ def draw_certificate(template_path: str, output_path: str, data: dict, placehold
         if text_width > max_width:
             scale_factor = max_width / text_width
             new_font_size = int(font_size * scale_factor)
-            font = get_font(font_name, bold, new_font_size)
+            font = get_font(font_name, bold, is_italic, new_font_size)
         
         draw.text((x, y), value, fill=color, font=font, anchor="la")
+        
+        # Draw Underline
+        if underline:
+            real_bbox = draw.textbbox((x, y), value, font=font, anchor="la")
+            # Draw line at bottom (a bit loose heuristic)
+            line_y = real_bbox[3] + (font_size * 0.05)
+            line_width = max(1, int(font_size/15))
+            draw.line([(real_bbox[0], line_y), (real_bbox[2], line_y)], fill=color, width=line_width)
+
+        # Draw Strikethrough
+        if strikethrough:
+            real_bbox = draw.textbbox((x, y), value, font=font, anchor="la")
+            # Middle of the text height
+            line_y = (real_bbox[1] + real_bbox[3]) / 2
+            line_width = max(1, int(font_size/15))
+            draw.line([(real_bbox[0], line_y), (real_bbox[2], line_y)], fill=color, width=line_width)
 
     cert.save(output_path)
     print(f"[SAVE] Certificate saved: {output_path}")
@@ -66,7 +137,20 @@ def generate_certificates_only(data_list, template_path, placeholders, is_previe
     
     for row in data_list:
         try:
-            name = row.get("Name", "Unnamed")
+            # Try to find name column (case-insensitive)
+            name = None
+            for key in row.keys():
+                if key.lower() == 'name':
+                    name = row[key]
+                    break
+            
+            # If no name column found, use first column value
+            if not name:
+                name = str(list(row.values())[0]) if row else "Unnamed"
+            
+            if not name:
+                name = "Unnamed"
+                
             file_name = f"{name}_preview.png" if is_preview else f"{name}.png"
             cert_path = os.path.join(OUTPUT_DIR, file_name)
             
@@ -76,8 +160,14 @@ def generate_certificates_only(data_list, template_path, placeholders, is_previe
                 generated_path = cert_path
                 break
         except Exception as e:
-            print(f"[ERROR] generating for {row.get('Name', 'Unknown')}: {e}")
-            errors.append(f"{row.get('Name', 'Unknown')}: {str(e)}")
+            # Get name for error message
+            error_name = "Unknown"
+            for key in row.keys():
+                if key.lower() == 'name':
+                    error_name = row[key]
+                    break
+            print(f"[ERROR] generating for {error_name}: {e}")
+            errors.append(f"{error_name}: {str(e)}")
             
     return generated_path if is_preview else errors
 
@@ -126,10 +216,10 @@ def send_single_email(smtp_host, smtp_port, sender_email, sender_password, row, 
 
 def send_certificates_only(data_list, email_column_name, subject, content):
     """Yields SSE events for real-time frontend updates."""
-    smtp_host = os.getenv("EMAIL_HOST")
-    smtp_port = int(os.getenv("EMAIL_PORT", 587))
-    sender_email = os.getenv("EMAIL_ADDRESS")
-    sender_password = os.getenv("EMAIL_PASSWORD")
+    smtp_host = os.getenv("SMTP_SERVER")
+    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    sender_email = os.getenv("SENDER_EMAIL")
+    sender_password = os.getenv("SMTP_PASSWORD")
 
     if not all([smtp_host, sender_email, sender_password]):
         yield json.dumps({"type": "error", "message": "Email server not configured. Please check .env file."}) + "\n"
@@ -145,7 +235,23 @@ def send_certificates_only(data_list, email_column_name, subject, content):
 
     # Inner function to access server/lock
     def _send_task(server, row):
-        name = row.get("Name", "Unnamed")
+        # Try to find name column (case-insensitive)
+        name = None
+        for key in row.keys():
+            if key.lower() == 'name':
+                name = row[key]
+                break
+        
+        # If no name column found, use first non-email column
+        if not name:
+            for key, value in row.items():
+                if key != email_column_name and value:
+                    name = str(value)
+                    break
+        
+        if not name:
+            name = "Unnamed"
+        
         email = row.get(email_column_name)
         if not email:
             return {"success": False, "message": f"No email found for {name}"}
