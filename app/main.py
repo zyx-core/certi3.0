@@ -9,6 +9,7 @@ from app.routes import (
     extract_image,
     email,
     mapping,
+    test_email,
 )
 
 app = FastAPI(title="Certificate Generator API")
@@ -29,6 +30,7 @@ app.include_router(email.router, tags=["Email"])
 app.include_router(extract_excel.router, tags=["Excel"])
 app.include_router(extract_image.router, tags=["Image"])
 app.include_router(mapping.router, tags=["Mapping"])
+app.include_router(test_email.router, prefix="/test", tags=["Debug"])
 
 
 @app.get("/api", tags=["Root"])
