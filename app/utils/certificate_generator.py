@@ -270,9 +270,8 @@ def send_certificates_only(data_list, email_column_name, subject, content):
             with open(cert_path, "rb") as f:
                 msg.add_attachment(f.read(), maintype="image", subtype="png", filename=f"{name}.png")
 
-            # Create a new SMTP connection for this thread
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
+            # Create a new SMTP_SSL connection for this thread (port 465)
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
                 server.login(sender_email, sender_password)
                 server.send_message(msg)
             
