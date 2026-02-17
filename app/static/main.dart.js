@@ -76293,7 +76293,7 @@ i=A.Y(f).h("a8<1,ay<f,f>>")
 a=A.a3(new A.a8(f,new A.ah_(),i),i.h("aA.E"))
 i=n.e
 i===$&&A.a()
-l=B.cD.Pe(A.aJ(["placeholders",b,"excel_data",a,"template_bytes",B.kP.gD8().cB(i),"email_column",n.r],c,t.X),null)
+l=B.cD.Pe(A.aJ(["placeholders",b,"excel_data",a,"template_bytes",B.kP.gD8().cB(i),"email_column",n.r,"subject","Your Certificate","content","Congratulations! Please find your certificate attached."],c,t.X),null)
 p=4
 s=a2?7:9
 break
