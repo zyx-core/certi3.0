@@ -7,3 +7,4 @@ Pillow
 python-multipart
 pytesseract
 opencv-python-headless
+resend

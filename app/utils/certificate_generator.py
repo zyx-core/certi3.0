@@ -1,10 +1,8 @@
 from PIL import Image, ImageDraw, ImageFont
-from email.message import EmailMessage
-import smtplib
 import os
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor
-import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import resend
 
 load_dotenv()
 print("[OK] certificate_generator module loaded")
@@ -215,34 +213,27 @@ def send_single_email(smtp_host, smtp_port, sender_email, sender_password, row, 
         return {"success": False, "message": f"❌ Failed to send to {email}: {e}"}
 
 def send_certificates_only(data_list, email_column_name, subject, content):
-    """Yields SSE events for real-time frontend updates."""
-    smtp_host = os.getenv("SMTP_SERVER")
-    smtp_port = int(os.getenv("SMTP_PORT", 465))
-    sender_email = os.getenv("SENDER_EMAIL")
-    sender_password = os.getenv("SMTP_PASSWORD")
+    """Yields SSE events for real-time frontend updates using Resend API."""
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    sender_email = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
 
-    if not all([smtp_host, sender_email, sender_password]):
-        yield json.dumps({"type": "error", "message": "Email server not configured. Please check .env file."}) + "\n"
+    if not resend_api_key:
+        yield json.dumps({"type": "error", "message": "Resend API key not configured. Please check environment variables."}) + "\n"
         return
 
-    yield json.dumps({"type": "log", "message": f"Connecting to email server..."}) + "\n"
+    resend.api_key = resend_api_key
 
     success_count = 0
     error_count = 0
     total = len(data_list)
-    
-    server_lock = threading.Lock()
 
-    # Inner function to send email with its own SMTP connection
     def _send_task(row):
-        # Try to find name column (case-insensitive)
         name = None
         for key in row.keys():
             if key.lower() == 'name':
                 name = row[key]
                 break
         
-        # If no name column found, use first non-email column
         if not name:
             for key, value in row.items():
                 if key != email_column_name and value:
@@ -261,26 +252,29 @@ def send_certificates_only(data_list, email_column_name, subject, content):
             if not os.path.exists(cert_path):
                 return {"success": False, "message": f"Certificate missing for {name}"}
 
-            msg = EmailMessage()
-            msg["From"] = sender_email
-            msg["To"] = email
-            msg["Subject"] = subject
-            msg.set_content(content.replace("{Name}", name))
-
             with open(cert_path, "rb") as f:
-                msg.add_attachment(f.read(), maintype="image", subtype="png", filename=f"{name}.png")
+                cert_content = list(f.read()) # Resend python sdk expects list of ints for bytes
 
-            # Create a new SMTP_SSL connection for this thread (port 465)
-            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-                server.login(sender_email, sender_password)
-                server.send_message(msg)
-            
+            params = {
+                "from": sender_email,
+                "to": [email],
+                "subject": subject,
+                "text": content.replace("{Name}", name),
+                "attachments": [
+                    {
+                        "filename": f"{name}.png",
+                        "content": cert_content,
+                    }
+                ],
+            }
+
+            resend.Emails.send(params)
             return {"success": True, "message": f"Sent to {name} ({email})"}
         except Exception as e:
             return {"success": False, "message": f"Failed to send to {name}: {str(e)}"}
 
     try:
-        yield json.dumps({"type": "log", "message": "Starting email sending process..."}) + "\n"
+        yield json.dumps({"type": "log", "message": "Starting email sending process via Resend API..."}) + "\n"
 
         with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {executor.submit(_send_task, row): row for row in data_list}
@@ -292,7 +286,6 @@ def send_certificates_only(data_list, email_column_name, subject, content):
                 else:
                     error_count += 1
                 
-                # Yield progress and log
                 yield json.dumps({
                     "type": "progress",
                     "sent": success_count,
@@ -301,7 +294,7 @@ def send_certificates_only(data_list, email_column_name, subject, content):
                     "log": result["message"]
                 }) + "\n"
 
-        yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully."}) + "\n"
+        yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully via Resend."}) + "\n"
 
     except Exception as e:
-        yield json.dumps({"type": "error", "message": f"Email server error: {str(e)}"}) + "\n" + "\n"
+        yield json.dumps({"type": "error", "message": f"Resend API error: {str(e)}"}) + "\n"

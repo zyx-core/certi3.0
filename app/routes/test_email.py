@@ -10,47 +10,43 @@ router = APIRouter()
 class TestEmailRequest(BaseModel):
     recipient: str
 
+import resend
+
 @router.post("/test-email")
 async def test_email(request: TestEmailRequest):
-    """Test email sending with detailed diagnostics"""
+    """Test email sending with detailed diagnostics for Resend"""
     
-    smtp_host = os.getenv("SMTP_SERVER")
-    smtp_port = int(os.getenv("SMTP_PORT", 465))
-    sender_email = os.getenv("SENDER_EMAIL")
-    sender_password = os.getenv("SMTP_PASSWORD")
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    sender_email = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
     
     diagnostics = {
-        "smtp_host": smtp_host,
-        "smtp_port": smtp_port,
+        "api_key_set": bool(resend_api_key),
+        "api_key_length": len(resend_api_key) if resend_api_key else 0,
         "sender_email": sender_email,
-        "password_set": bool(sender_password),
-        "password_length": len(sender_password) if sender_password else 0,
     }
     
-    # Check if all credentials are set
-    if not all([smtp_host, sender_email, sender_password]):
+    if not resend_api_key:
         return {
             "success": False,
-            "error": "Missing environment variables",
+            "error": "Missing RESEND_API_KEY environment variable",
             "diagnostics": diagnostics
         }
     
     try:
-        # Create test message
-        msg = EmailMessage()
-        msg["From"] = sender_email
-        msg["To"] = request.recipient
-        msg["Subject"] = "Test Email from Render"
-        msg.set_content("This is a test email sent from your deployed app on Render.")
+        resend.api_key = resend_api_key
         
-        # Try to send
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=10) as server:
-            server.login(sender_email, sender_password)
-            server.send_message(msg)
+        params = {
+            "from": sender_email,
+            "to": [request.recipient],
+            "subject": "Resend API Test from Render",
+            "text": "This is a test email sent using the Resend API from your deployed app on Render."
+        }
+        
+        resend.Emails.send(params)
         
         return {
             "success": True,
-            "message": f"Test email sent successfully to {request.recipient}",
+            "message": f"Resend API test successful! Email queued for {request.recipient}",
             "diagnostics": diagnostics
         }
     
