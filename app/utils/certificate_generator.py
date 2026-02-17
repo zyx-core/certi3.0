@@ -217,7 +217,7 @@ def send_single_email(smtp_host, smtp_port, sender_email, sender_password, row, 
 def send_certificates_only(data_list, email_column_name, subject, content):
     """Yields SSE events for real-time frontend updates."""
     smtp_host = os.getenv("SMTP_SERVER")
-    smtp_port = int(os.getenv("SMTP_PORT", 587))
+    smtp_port = int(os.getenv("SMTP_PORT", 465))
     sender_email = os.getenv("SENDER_EMAIL")
     sender_password = os.getenv("SMTP_PASSWORD")
 

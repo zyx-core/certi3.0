@@ -62,3 +62,66 @@ async def test_email(request: TestEmailRequest):
             "traceback": traceback.format_exc(),
             "diagnostics": diagnostics
         }
+from fastapi.responses import HTMLResponse
+
+@router.get("/ui", response_class=HTMLResponse)
+async def test_email_ui():
+    """Serves a simple HTML UI to trigger the email test"""
+    return """
+    <html>
+        <head>
+            <title>Email Diagnostic Tool</title>
+            <style>
+                body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; line-height: 1.6; }
+                pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; border-radius: 4px; border: 1px solid #ddd; }
+                .success { color: green; font-weight: bold; }
+                .error { color: red; font-weight: bold; }
+                input[type="email"] { padding: 0.5rem; width: 300px; margin-bottom: 1rem; }
+                button { padding: 0.5rem 1rem; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+                button:hover { background: #0056b3; }
+            </style>
+        </head>
+        <body>
+            <h1>Email Diagnostic Tool</h1>
+            <p>This tool test the email connection from the Render server.</p>
+            <div>
+                <input type="email" id="email" placeholder="Enter recipient email" value="ershadpersonal123@gmail.com">
+                <button onclick="runTest()">Run Test</button>
+            </div>
+            <div id="status"></div>
+            <h3>Result:</h3>
+            <pre id="result">Click "Run Test" to start...</pre>
+
+            <script>
+                async function runTest() {
+                    const email = document.getElementById('email').value;
+                    const resultPre = document.getElementById('result');
+                    const statusDiv = document.getElementById('status');
+                    
+                    if (!email) { alert('Please enter an email'); return; }
+                    
+                    statusDiv.innerHTML = '<b>Running test... please wait...</b>';
+                    resultPre.textContent = 'Testing connection...';
+                    
+                    try {
+                        const response = await fetch('/test/test-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ recipient: email })
+                        });
+                        const data = await response.json();
+                        
+                        statusDiv.innerHTML = data.success 
+                            ? '<span class="success">✅ Test Successful!</span>' 
+                            : '<span class="error">❌ Test Failed!</span>';
+                        
+                        resultPre.textContent = JSON.stringify(data, null, 2);
+                    } catch (err) {
+                        statusDiv.innerHTML = '<span class="error">❌ Request Failed!</span>';
+                        resultPre.textContent = err.toString();
+                    }
+                }
+            </script>
+        </body>
+    </html>
+    """
