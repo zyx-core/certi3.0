@@ -8,3 +8,4 @@ python-multipart
 pytesseract
 opencv-python-headless
 resend
+sib-api-v3-sdk

@@ -1,10 +1,11 @@
 from PIL import Image, ImageDraw, ImageFont
 import os
 from dotenv import load_dotenv
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import resend
 import time
 import json
+import base64
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
 load_dotenv()
 print("[OK] certificate_generator module loaded")
@@ -215,15 +216,18 @@ def send_single_email(smtp_host, smtp_port, sender_email, sender_password, row, 
         return {"success": False, "message": f"❌ Failed to send to {email}: {e}"}
 
 def send_certificates_only(data_list, email_column_name, subject, content):
-    """Yields SSE events for real-time frontend updates using Resend API."""
-    resend_api_key = os.getenv("RESEND_API_KEY")
-    sender_email = os.getenv("SENDER_EMAIL", "onboarding@resend.dev")
+    """Yields SSE events for real-time frontend updates using Brevo API."""
+    brevo_api_key = os.getenv("BREVO_API_KEY")
+    sender_email = os.getenv("SENDER_EMAIL")
 
-    if not resend_api_key:
-        yield json.dumps({"type": "error", "message": "Resend API key not configured. Please check environment variables."}) + "\n"
+    if not brevo_api_key:
+        yield json.dumps({"type": "error", "message": "Brevo API key not configured. Please check environment variables."}) + "\n"
         return
 
-    resend.api_key = resend_api_key
+    # Configure Brevo
+    configuration = sib_api_v3_sdk.Configuration()
+    configuration.api_key['api-key'] = brevo_api_key
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
 
     success_count = 0
     error_count = 0
@@ -255,28 +259,28 @@ def send_certificates_only(data_list, email_column_name, subject, content):
                 return {"success": False, "message": f"Certificate missing for {name}"}
 
             with open(cert_path, "rb") as f:
-                cert_content = list(f.read()) # Resend python sdk expects list of ints for bytes
+                cert_content_base64 = base64.b64encode(f.read()).decode('utf-8')
 
-            params = {
-                "from": sender_email,
-                "to": [email],
-                "subject": subject,
-                "text": content.replace("{Name}", name),
-                "attachments": [
-                    {
-                        "filename": f"{name}.png",
-                        "content": cert_content,
-                    }
-                ],
-            }
+            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                to=[{"email": email, "name": name}],
+                sender={"email": sender_email, "name": "Certificate Generator"},
+                subject=subject,
+                html_content=f"<html><body>{content.replace('{Name}', name)}</body></html>",
+                attachments=[{
+                    "content": cert_content_base64,
+                    "name": f"{name}.png"
+                }]
+            )
 
-            resend.Emails.send(params)
+            api_instance.send_transac_email(send_smtp_email)
             return {"success": True, "message": f"Sent to {name} ({email})"}
+        except ApiException as e:
+            return {"success": False, "message": f"Brevo Error for {name}: {e.reason}"}
         except Exception as e:
             return {"success": False, "message": f"Failed to send to {name}: {str(e)}"}
 
     try:
-        yield json.dumps({"type": "log", "message": "Starting email sending process via Resend API..."}) + "\n"
+        yield json.dumps({"type": "log", "message": "Starting email sending process via Brevo API..."}) + "\n"
         
         for row in data_list:
             result = _send_task(row)
@@ -293,9 +297,10 @@ def send_certificates_only(data_list, email_column_name, subject, content):
                 "log": result["message"]
             }) + "\n"
             
-            time.sleep(1.0)
+            # Small delay to be safe, though Brevo handles high concurrency better
+            time.sleep(0.5)
 
-        yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully via Resend."}) + "\n"
+        yield json.dumps({"type": "complete", "message": f"Done! Sent {success_count} emails successfully via Brevo."}) + "\n"
 
     except Exception as e:
-        yield json.dumps({"type": "error", "message": f"Resend API error: {str(e)}"}) + "\n"
+        yield json.dumps({"type": "error", "message": f"Brevo Service error: {str(e)}"}) + "\n"
