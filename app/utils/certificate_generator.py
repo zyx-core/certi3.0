@@ -266,7 +266,7 @@ def send_certificates_only(data_list, email_column_name, subject, content):
                 sender={"email": sender_email, "name": "Certificate Generator"},
                 subject=subject,
                 html_content=f"<html><body>{content.replace('{Name}', name)}</body></html>",
-                attachments=[{
+                attachment=[{
                     "content": cert_content_base64,
                     "name": f"{name}.png"
                 }]
