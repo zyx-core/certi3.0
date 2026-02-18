@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import time
 import json
 import base64
+import zipfile
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 
@@ -134,7 +135,8 @@ def draw_certificate(template_path: str, output_path: str, data: dict, placehold
 def generate_certificates_only(data_list, template_path, placeholders, is_preview: bool = False):
     """Generate certificates with manually defined font sizes from the frontend."""
     errors = []
-    generated_path = None
+    generated_paths = []
+    preview_path = None
     
     for row in data_list:
         try:
@@ -156,9 +158,10 @@ def generate_certificates_only(data_list, template_path, placeholders, is_previe
             cert_path = os.path.join(OUTPUT_DIR, file_name)
             
             draw_certificate(template_path, cert_path, row, placeholders)
+            generated_paths.append(cert_path)
 
             if is_preview:
-                generated_path = cert_path
+                preview_path = cert_path
                 break
         except Exception as e:
             # Get name for error message
@@ -170,7 +173,19 @@ def generate_certificates_only(data_list, template_path, placeholders, is_previe
             print(f"[ERROR] generating for {error_name}: {e}")
             errors.append(f"{error_name}: {str(e)}")
             
-    return generated_path if is_preview else errors
+    if is_preview:
+        return preview_path
+    return generated_paths, errors
+
+def create_zip_archive(paths):
+    """Creates a temporary zip file from the given paths."""
+    fd, zip_path = tempfile.mkstemp(suffix=".zip")
+    os.close(fd)
+    with zipfile.ZipFile(zip_path, 'w') as zipf:
+        for path in paths:
+            if os.path.exists(path):
+                zipf.write(path, arcname=os.path.basename(path))
+    return zip_path
 
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed

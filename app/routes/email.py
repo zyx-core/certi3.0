@@ -30,7 +30,7 @@ async def generate_only(
         df = pd.read_excel(excel_path)
         data = df.to_dict(orient="records")
 
-        errors = generate_certificates_only(data, template_path, placeholder_dict)
+        _, errors = generate_certificates_only(data, template_path, placeholder_dict)
 
         if errors:
             return JSONResponse(status_code=207, content={"message": "Some certificates failed", "errors": errors})

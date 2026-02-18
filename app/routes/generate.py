@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
 import base64, tempfile
 import pandas as pd
-from app.utils.certificate_generator import generate_certificates_only, send_certificates_only
+from app.utils.certificate_generator import generate_certificates_only, send_certificates_only, create_zip_archive
 from fastapi.responses import FileResponse
 
 router = APIRouter()
@@ -45,7 +45,7 @@ async def generate_and_send_uploaded(data: CertificateData):
         records = data.excel_data
         
         # Generate certificates first (no streaming here)
-        errors_gen = generate_certificates_only(
+        _, errors_gen = generate_certificates_only(
             data_list=records, 
             template_path=template_path, 
             placeholders=data.placeholders
@@ -67,6 +67,36 @@ async def generate_and_send_uploaded(data: CertificateData):
     except Exception as e:
         import traceback
         print("Exception in /generate-and-send-uploaded:", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/download-zip")
+async def download_zip(data: CertificateData):
+    try:
+        image_data = base64.b64decode(data.template_bytes)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_template:
+            tmp_template.write(image_data)
+            template_path = tmp_template.name
+
+        records = data.excel_data
+        
+        # Generate certificates
+        generated_paths, errors = generate_certificates_only(
+            data_list=records, 
+            template_path=template_path, 
+            placeholders=data.placeholders
+        )
+        
+        if not generated_paths:
+             raise HTTPException(status_code=500, detail="No certificates were generated.")
+
+        # Create ZIP
+        zip_path = create_zip_archive(generated_paths)
+        
+        return FileResponse(zip_path, filename="certificates.zip", media_type="application/zip")
+
+    except Exception as e:
+        import traceback
+        print(f"Exception in /download-zip: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate-preview")
