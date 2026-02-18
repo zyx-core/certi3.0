@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 # Import your route modules
 from app.routes import (
@@ -37,6 +40,10 @@ app.include_router(test_email.router, prefix="/test", tags=["Debug"])
 def read_root():
     return {"message": "Certificate Generator API is up and running."}
 
+@app.get("/health", tags=["Root"])
+def health_check():
+    return {"status": "healthy"}
+
 @app.get("/")
 async def serve_home():
     # Serve the index.html from the static directory
@@ -54,9 +61,6 @@ def debug_routes():
 
 
 # --- Serve Flutter Static Files ---
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import os
 
 # Mount the static directory (ensure 'app/static' exists and contains Flutter build)
 static_dir = os.path.join(os.path.dirname(__file__), "static")

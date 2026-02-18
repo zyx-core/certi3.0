@@ -28,8 +28,8 @@ COPY . .
 # Create the static directory for Flutter files (if it doesn't exist yet)
 RUN mkdir -p app/static
 
-# Expose the port
+# Expose the port (Render will use this if PORT is not set)
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application using shell form to expand environment variables
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
